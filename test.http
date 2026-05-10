@@ -1,0 +1,10 @@
+POST http://127.0.0.1:8000/api/v1/account/telegram_auth/
+Content-Type: application/json
+
+{
+  "initData": "user=%7B%22id%22%3A990921089%2C%22first_name%22%3A%22Molart%22%2C%22last_name%22%3A%22%22%2C%22username%22%3A%22Molart12%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2FKZhniCbQi9zG2zqlT5jfTsWIQUQO9cXBkL3PFtn63aM.svg%22%7D&chat_instance=4863382006678353819&chat_type=sender&auth_date=1778313798&signature=HSGh0T32u4N7JAKgGxrwp9_5Ff57VE1ceDkzX7dlQfGjrQy_XsquQsqp6b_T7FpThEuw8foTKl_bI2RP3g9sBQ&hash=d9769f86f778e94432ab40e2ed93728d447d22d51d48f247805057114ce7476a"
+}
+
+### Проверка Gifts (Shop)
+GET http://127.0.0.1:8000/api/v1/shop/gifts/
+Authorization: Bearer <access_token_here>
