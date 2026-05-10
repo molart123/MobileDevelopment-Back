@@ -9,22 +9,35 @@ class Ticket(models.Model):
 
 
 class PromoCodeGift(models.Model):
-    """База промокодов для подарков."""
-    code = models.CharField(max_length=100, unique=True)
+    """База подарков с разными типами наград."""
+
+    GIFT_TYPES = [
+        ('PROMOCODE', 'Промокод'),
+        ('EGGS', 'Яйца'),
+        ('TICKETS', 'Билеты'),
+    ]
+
+    name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     image = models.URLField(blank=True, default="")
+    gift_type = models.CharField(max_length=20, choices=GIFT_TYPES, default='PROMOCODE')
+    code = models.CharField(max_length=100, blank=True, default="")
+    eggs_amount = models.IntegerField(default=0)
+    tickets_amount = models.IntegerField(default=0)
+    drop_chance = models.FloatField(default=10.0, help_text="Шанс выпадения в процентах")
     is_used = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.code} - {'Использован' if self.is_used else 'Доступен'}"
+        return f"{self.name} ({self.get_gift_type_display()})"
 
     class Meta:
-        verbose_name = "Промокод для подарка"
-        verbose_name_plural = "Промокоды для подарков"
+        verbose_name = "Подарок"
+        verbose_name_plural = "Подарки"
 
 
 class InstantGift(models.Model):
+    """Полученные пользователем подарки (промокоды)."""
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -35,6 +48,7 @@ class InstantGift(models.Model):
 
 
 class PromoCode(models.Model):
+    """Промокоды для активации пользователем."""
     code = models.CharField(max_length=50, unique=True)
     eggs_reward = models.IntegerField(default=100)
     max_uses = models.IntegerField(default=1)

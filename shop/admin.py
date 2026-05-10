@@ -9,9 +9,23 @@ class PriceAdmin(admin.ModelAdmin):
 
 @admin.register(PromoCodeGift)
 class PromoCodeGiftAdmin(admin.ModelAdmin):
-    list_display = ('code', 'description', 'is_used', 'created_at')
-    list_filter = ('is_used',)
-    search_fields = ('code', 'description')
+    list_display = ('name', 'gift_type', 'drop_chance', 'is_used', 'created_at')
+    list_filter = ('gift_type', 'is_used')
+    search_fields = ('name', 'code', 'description')
+    fieldsets = (
+        ('Основное', {
+            'fields': ('name', 'description', 'image', 'gift_type', 'drop_chance')
+        }),
+        ('Промокод', {
+            'fields': ('code',),
+        }),
+        ('Яйца', {
+            'fields': ('eggs_amount',),
+        }),
+        ('Билеты', {
+            'fields': ('tickets_amount',),
+        }),
+    )
 
 
 @admin.register(InstantGift)

@@ -1,11 +1,5 @@
 from rest_framework import serializers
-from .models import InstantGift, Price, CommunityAccess, PromoCodeGift
-
-
-class PromoCodeGiftSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PromoCodeGift
-        fields = ['code', 'description', 'image']
+from .models import InstantGift, Price, CommunityAccess
 
 
 class InstantGiftSerializer(serializers.ModelSerializer):
