@@ -76,6 +76,20 @@ class TelegramAuthView(APIView):
             }
         )
 
+        # Создаём игровой прогресс для нового пользователя
+        from game.models import GameProgress
+        from django.utils import timezone
+        from datetime import timedelta
+
+        GameProgress.objects.get_or_create(
+            user=user,
+            defaults={
+                'next_accrual_at': timezone.now() + timedelta(hours=4),
+                'eggs_per_cycle': 140,
+                'cycle_hours': 4
+            }
+        )
+
         refresh = RefreshToken.for_user(user)
         return Response({
             "status": "ok",
@@ -97,6 +111,6 @@ class UserBalanceView(APIView):
 
     def get(self, request):
         user = request.user
-        user.reset_today_eggs_if_new_day()  # обнулим если нужно
+        user.reset_today_eggs_if_new_day()
         serializer = UserBalanceSerializer(user)
         return Response(serializer.data)

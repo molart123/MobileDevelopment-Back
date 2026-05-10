@@ -12,7 +12,14 @@ class TimerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        progress, _ = GameProgress.objects.get_or_create(user=request.user)
+        progress, _ = GameProgress.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'next_accrual_at': timezone.now() + timedelta(hours=4),
+                'eggs_per_cycle': 140,
+                'cycle_hours': 4
+            }
+        )
         serializer = TimerSerializer(progress)
         return Response(serializer.data)
 
@@ -25,15 +32,9 @@ class TimerView(APIView):
         new_time = serializer.validated_data['next_accrual_at']
         now = timezone.now()
         if new_time < now:
-            return Response(
-                {"detail": "Cannot set a past date."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Нельзя установить время в прошлом."}, status=status.HTTP_400_BAD_REQUEST)
         if new_time > now + timedelta(days=7):
-            return Response(
-                {"detail": "Cannot set a date more than 7 days ahead."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Нельзя больше 7 дней."}, status=status.HTTP_400_BAD_REQUEST)
 
         progress.next_accrual_at = new_time
         progress.save()
@@ -44,25 +45,42 @@ class ClaimEggsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        progress, _ = GameProgress.objects.get_or_create(user=request.user)
+        progress, _ = GameProgress.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'next_accrual_at': timezone.now() + timedelta(hours=4),
+                'eggs_per_cycle': 140,
+                'cycle_hours': 4
+            }
+        )
+
         available = progress.get_available_eggs()
         if available <= 0:
-            return Response(
-                {"detail": "No eggs to claim."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "Яйца ещё не готовы."}, status=status.HTTP_400_BAD_REQUEST)
 
         user = request.user
-        user.reset_today_eggs_if_new_day()
         user.eggs_count += available
         user.total_eggs_count += available
         user.today_eggs_count += available
-        user.save(update_fields=['eggs_count', 'total_eggs_count', 'today_eggs_count'])
+        user.save()
 
-        progress.next_accrual_at = timezone.now()
+        progress.next_accrual_at = timezone.now() + timedelta(hours=4)
         progress.save()
 
-        return Response({
-            "claimed_eggs": available,
-            "new_balance": user.eggs_count,
-        })
+        return Response({"claimed_eggs": available, "new_balance": user.eggs_count})
+
+
+class ClickEggView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        progress, _ = GameProgress.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'next_accrual_at': timezone.now() + timedelta(hours=4),
+                'eggs_per_cycle': 140,
+                'cycle_hours': 4
+            }
+        )
+        progress.click_egg()
+        return Response(TimerSerializer(progress).data)
