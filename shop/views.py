@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Ticket, InstantGift, PromoCode, PromoCodeUsage, Price, CommunityAccess, PromoCodeGift
 from .serializers import (
     InstantGiftSerializer, PriceSerializer, CommunityAccessSerializer,
-    TicketBuySerializer, PromoCodeSerializer, PromoCodeGiftSerializer
+    TicketBuySerializer, PromoCodeSerializer
 )
 
 
@@ -20,6 +20,7 @@ def get_price(setting_type):
 
 
 class TicketBuyView(APIView):
+    """Купить билеты для разбивания яиц."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -48,7 +49,7 @@ class TicketBuyView(APIView):
 
 
 class InstantGiftBuyView(APIView):
-    """Купить мгновенный подарок — случайный промокод."""
+    """Купить мгновенный подарок — получение конкретного промокода по выбранной карточке."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -57,25 +58,46 @@ class InstantGiftBuyView(APIView):
         price = get_price("INSTANT_GIFT_PRICE")
 
         if user.eggs_count < price:
-            return Response({"detail": "Недостаточно яиц."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Недостаточно яиц."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        available_codes = PromoCodeGift.objects.filter(is_used=False)
-        if not available_codes.exists():
-            return Response({"detail": "Подарки закончились."}, status=status.HTTP_400_BAD_REQUEST)
+        # Получаем ID или код карточки, которую выбрал пользователь
+        card_id = request.data.get("card_id")
+        card_code = request.data.get("card_code")
 
-        promo = random.choice(available_codes)
-        promo.is_used = True
-        promo.save()
+        try:
+            if card_id:
+                gift_card = PromoCodeGift.objects.get(id=card_id, is_used=False)
+            elif card_code:
+                gift_card = PromoCodeGift.objects.get(code=card_code, is_used=False)
+            else:
+                return Response(
+                    {"detail": "Не выбрана карточка."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except PromoCodeGift.DoesNotExist:
+            return Response(
+                {"detail": "Подарок недоступен или уже использован."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+        # Списываем яйца
         user.eggs_count -= price
         user.save(update_fields=['eggs_count'])
 
+        # Помечаем промокод использованным
+        gift_card.is_used = True
+        gift_card.save()
+
+        # Сохраняем подарок у пользователя
         gift = InstantGift.objects.create(
             user=user,
-            name="Мгновенный подарок",
-            description=promo.description,
-            image=promo.image,
-            promo_code=promo.code,
+            name=gift_card.name if hasattr(gift_card, 'name') else "Мгновенный подарок",
+            description=gift_card.description,
+            image=gift_card.image,
+            promo_code=gift_card.code,
             expires_at=timezone.now() + timedelta(days=30)
         )
 
@@ -87,6 +109,7 @@ class InstantGiftBuyView(APIView):
 
 
 class InstantGiftListView(APIView):
+    """Список полученных подарков."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -95,6 +118,7 @@ class InstantGiftListView(APIView):
 
 
 class PromoCodeActivateView(APIView):
+    """Активировать промокод."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -129,6 +153,7 @@ class PromoCodeActivateView(APIView):
 
 
 class PriceListView(APIView):
+    """Список цен."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -146,6 +171,7 @@ class PriceListView(APIView):
 
 
 class CommunityAccessBuyView(APIView):
+    """Купить доступ в комьюнити."""
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -167,6 +193,7 @@ class CommunityAccessBuyView(APIView):
 
 
 class CommunityAccessStatusView(APIView):
+    """Статус доступа в комьюнити."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
