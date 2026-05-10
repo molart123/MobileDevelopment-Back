@@ -1,0 +1,7 @@
+from django.urls import path
+from .views import TimerView, ClaimEggsView
+
+urlpatterns = [
+    path('timer/', TimerView.as_view(), name='eggs_timer'),
+    path('claim/', ClaimEggsView.as_view(), name='eggs_claim'),
+]
