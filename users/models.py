@@ -1,42 +1,70 @@
-from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.utils import timezone
+from django.conf import settings
+import uuid
 
 
-class CustomUser(AbstractUser):
-    telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
-    photo_url = models.URLField(blank=True, default="", verbose_name="Avatar URL")
-    auth_date = models.DateTimeField(null=True, blank=True)
-
-    # Баланс яиц (текущий)
-    eggs_count = models.IntegerField(default=0, verbose_name="Eggs balance")
-    # Всего заработано яиц за всё время
-    total_eggs_count = models.IntegerField(default=0, verbose_name="Total eggs earned")
-    # Яйца, заработанные сегодня
-    today_eggs_count = models.IntegerField(default=0, verbose_name="Eggs earned today")
-    # Дата последнего сброса today_eggs_count
-    today_eggs_date = models.DateField(null=True, blank=True, verbose_name="Last reset date for today eggs")
-
-    # Билеты для разбивания яиц (дублируем для быстрого доступа)
-    tickets_count = models.IntegerField(default=0, verbose_name="Tickets")
-    # Выполнены ли ежедневные задания
-    is_daily_tasks_completed = models.BooleanField(default=False)
-
+class Ticket(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    amount = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        verbose_name = "User"
-        verbose_name_plural = "Users"
-        ordering = ['-created_at']
+
+class PromoCodeGift(models.Model):
+    """База промокодов для подарков."""
+    code = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    image = models.URLField(blank=True, default="")
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.first_name} (@{self.username})"
+        return f"{self.code} - {'Использован' if self.is_used else 'Доступен'}"
 
-    def reset_today_eggs_if_new_day(self):
-        """Обнуляет today_eggs_count, если наступил новый день."""
-        today = timezone.localdate()
-        if self.today_eggs_date != today:
-            self.today_eggs_count = 0
-            self.today_eggs_date = today
-            self.save(update_fields=['today_eggs_count', 'today_eggs_date'])
+    class Meta:
+        verbose_name = "Промокод для подарка"
+        verbose_name_plural = "Промокоды для подарков"
+
+
+class InstantGift(models.Model):
+    """Полученные пользователем подарки."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    image = models.URLField(blank=True, default="")
+    promo_code = models.CharField(max_length=100, blank=True, default="")
+    expires_at = models.DateTimeField(null=True, blank=True)
+    obtained_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.first_name} - {self.name}"
+
+
+class PromoCode(models.Model):
+    """Промокоды для активации (старая модель)."""
+    code = models.CharField(max_length=50, unique=True)
+    eggs_reward = models.IntegerField(default=100)
+    max_uses = models.IntegerField(default=1)
+    used_count = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+
+class PromoCodeUsage(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    promo_code = models.ForeignKey(PromoCode, on_delete=models.CASCADE)
+    used_at = models.DateTimeField(auto_now_add=True)
+
+
+class Price(models.Model):
+    SETTING_TYPE_CHOICES = [
+        ("TICKET_PRICE", "Ticket Price"),
+        ("INSTANT_GIFT_PRICE", "Instant Gift Price"),
+        ("COMMUNITY_ENTRY_PRICE", "Community Entry Price"),
+    ]
+    setting_type = models.CharField(max_length=50, unique=True, choices=SETTING_TYPE_CHOICES)
+    price = models.IntegerField()
+
+
+class CommunityAccess(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    has_community_access = models.BooleanField(default=False)
+    purchased_at = models.DateTimeField(null=True, blank=True)
