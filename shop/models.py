@@ -8,11 +8,26 @@ class Ticket(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class PromoCodeGift(models.Model):
+    """База промокодов для подарков."""
+    code = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    image = models.URLField(blank=True, default="")
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.code} - {'Использован' if self.is_used else 'Доступен'}"
+
+    class Meta:
+        verbose_name = "Промокод для подарка"
+        verbose_name_plural = "Промокоды для подарков"
+
+
 class InstantGift(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    # Новые поля
     image = models.URLField(blank=True, default="")
     promo_code = models.CharField(max_length=100, blank=True, default="")
     expires_at = models.DateTimeField(null=True, blank=True)
