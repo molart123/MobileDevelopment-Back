@@ -1,9 +1,13 @@
 import hmac
 import hashlib
+import json
+import requests
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.http import HttpResponse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,9 +19,7 @@ from .serializers import UserBalanceSerializer
 
 
 class TelegramAuthView(APIView):
-    """
-    Авторизация через Telegram Mini App (initDataUnsafe).
-    """
+    """Авторизация через Telegram Mini App (initDataUnsafe)."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -39,7 +41,6 @@ class TelegramAuthView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Проверка auth_date (не старше 24 часов)
         try:
             auth_timestamp = int(auth_date)
         except (ValueError, TypeError):
@@ -57,7 +58,6 @@ class TelegramAuthView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Проверка подписи Telegram
         bot_token = settings.TELEGRAM_BOT_TOKEN
         secret_key = hmac.new(
             b"WebAppData",
@@ -90,7 +90,6 @@ class TelegramAuthView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Создаём или обновляем пользователя
         user, created = CustomUser.objects.update_or_create(
             telegram_id=user_data['id'],
             defaults={
@@ -109,9 +108,7 @@ class TelegramAuthView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Создаём игровой прогресс для нового пользователя
         from game.models import GameProgress
-
         GameProgress.objects.get_or_create(
             user=user,
             defaults={
@@ -138,9 +135,7 @@ class TelegramAuthView(APIView):
 
 
 class TelegramLoginView(APIView):
-    """
-    Авторизация через Telegram Login Widget (сайт/APK).
-    """
+    """Авторизация через Telegram Login Widget (сайт/APK)."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -156,7 +151,6 @@ class TelegramLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Проверка срока auth_date (не старше 24 часов)
         try:
             auth_timestamp = int(auth_date)
         except (ValueError, TypeError):
@@ -174,7 +168,6 @@ class TelegramLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Проверка hash
         bot_token = settings.TELEGRAM_BOT_TOKEN
         secret_key = hmac.new(
             b"WebAppData",
@@ -203,7 +196,6 @@ class TelegramLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Создаём или обновляем пользователя
         user, created = CustomUser.objects.update_or_create(
             telegram_id=user_id,
             defaults={
@@ -222,9 +214,7 @@ class TelegramLoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Создаём игровой прогресс
         from game.models import GameProgress
-
         GameProgress.objects.get_or_create(
             user=user,
             defaults={
@@ -251,10 +241,7 @@ class TelegramLoginView(APIView):
 
 
 class BotLoginInitView(APIView):
-    """
-    Инициализация входа через бота.
-    Создаёт токен и start-параметр для команды /start.
-    """
+    """Инициализация входа через бота."""
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -267,10 +254,7 @@ class BotLoginInitView(APIView):
 
 
 class BotLoginStatusView(APIView):
-    """
-    Проверка статуса входа через бота.
-    ?token=<token>
-    """
+    """Проверка статуса входа через бота."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -326,3 +310,59 @@ class UserBalanceView(APIView):
         user.reset_today_eggs_if_new_day()
         serializer = UserBalanceSerializer(user)
         return Response(serializer.data)
+
+
+# -------- Вебхук для бота (замена Always-on задаче) --------
+def send_telegram_message(chat_id, text):
+    """Отправка сообщения через Bot API."""
+    token = settings.TELEGRAM_BOT_TOKEN
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    requests.post(url, json={'chat_id': chat_id, 'text': text})
+
+
+@csrf_exempt
+def telegram_webhook(request):
+    """Обрабатывает входящие сообщения от Telegram (вебхук)."""
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponse(status=400)
+
+    if 'message' in data:
+        msg = data['message']
+        text = msg.get('text', '')
+        chat_id = msg['chat']['id']
+
+        if text.startswith('/start login_'):
+            token = text.split(' ', 1)[1][6:]
+            try:
+                session = BotLoginSession.objects.get(token=token, status='pending')
+                if session.is_expired():
+                    session.status = 'expired'
+                    session.save()
+                    send_telegram_message(chat_id, "Срок действия ссылки истёк, попробуйте ещё раз.")
+                    return HttpResponse(status=200)
+
+                tg_id = msg['from']['id']
+                user, created = CustomUser.objects.get_or_create(
+                    telegram_id=tg_id,
+                    defaults={
+                        'first_name': msg['from'].get('first_name', ''),
+                        'last_name': msg['from'].get('last_name', ''),
+                        'username': msg['from'].get('username', ''),
+                        'auth_date': timezone.now(),
+                    }
+                )
+                session.user = user
+                session.status = 'ready'
+                session.save()
+                send_telegram_message(chat_id, "Вход выполнен, вернитесь в приложение!")
+            except BotLoginSession.DoesNotExist:
+                send_telegram_message(chat_id, "Неверный код входа.")
+        else:
+            send_telegram_message(chat_id, "Добро пожаловать! Этот бот для входа в EggsTapping.")
+
+    return HttpResponse(status=200)
