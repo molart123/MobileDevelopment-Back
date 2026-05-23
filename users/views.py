@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
-from .models import CustomUser
+from .models import CustomUser, BotLoginSession
 from .serializers import UserBalanceSerializer
 
 
@@ -25,7 +25,6 @@ class TelegramAuthView(APIView):
         auth_date = request.data.get('auth_date')
         received_hash = request.data.get('hash')
 
-        # Проверка наличия полей
         if not user_data or not auth_date or not received_hash:
             return Response(
                 {"code": "invalid_telegram_hash",
@@ -249,6 +248,66 @@ class TelegramLoginView(APIView):
             "refresh_token": str(refresh),
             "created": created,
         })
+
+
+class BotLoginInitView(APIView):
+    """
+    Инициализация входа через бота.
+    Создаёт токен и start-параметр для команды /start.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        session = BotLoginSession.objects.create()
+        return Response({
+            "token": session.token,
+            "expires_in": 300,
+            "start_param": f"login_{session.token}"
+        })
+
+
+class BotLoginStatusView(APIView):
+    """
+    Проверка статуса входа через бота.
+    ?token=<token>
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = request.query_params.get('token')
+        if not token:
+            return Response({"detail": "Token required"}, status=400)
+
+        try:
+            session = BotLoginSession.objects.get(token=token)
+        except BotLoginSession.DoesNotExist:
+            return Response({"status": "expired"}, status=404)
+
+        if session.status == 'ready':
+            user = session.user
+            if not user or not user.is_active:
+                return Response({"code": "inactive_user"}, status=403)
+
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                "status": "ready",
+                "user": {
+                    "id": user.id,
+                    "telegram_id": user.telegram_id,
+                    "first_name": user.first_name,
+                    "username": user.username,
+                    "balance": user.eggs_count,
+                },
+                "access_token": str(refresh.access_token),
+                "refresh_token": str(refresh),
+                "created": False
+            })
+
+        if session.status == 'pending' and session.is_expired():
+            session.status = 'expired'
+            session.save()
+
+        return Response({"status": session.status})
 
 
 class CustomTokenRefreshView(TokenRefreshView):
