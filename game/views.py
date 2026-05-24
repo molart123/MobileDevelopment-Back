@@ -31,10 +31,18 @@ class TimerView(APIView):
 
         new_time = serializer.validated_data['next_accrual_at']
         now = timezone.now()
-        if new_time < now:
-            return Response({"detail": "Нельзя установить время в прошлом."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Разрешаем время не более чем на 2 минуты в прошлом (чтобы клики доходили до 0)
+        if new_time < now - timedelta(minutes=2):
+            return Response(
+                {"detail": "Нельзя установить время в прошлом."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         if new_time > now + timedelta(days=7):
-            return Response({"detail": "Нельзя больше 7 дней."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Нельзя больше 7 дней."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         progress.next_accrual_at = new_time
         progress.save()
